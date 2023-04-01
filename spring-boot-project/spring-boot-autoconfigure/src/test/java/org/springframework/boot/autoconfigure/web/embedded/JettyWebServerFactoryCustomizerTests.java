@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2021 the original author or authors.
+ * Copyright 2012-2023 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,7 +24,6 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.SynchronousQueue;
-import java.util.stream.Collectors;
 
 import org.eclipse.jetty.server.AbstractConnector;
 import org.eclipse.jetty.server.Connector;
@@ -46,6 +45,8 @@ import org.springframework.boot.autoconfigure.web.ServerProperties.Jetty;
 import org.springframework.boot.context.properties.bind.Bindable;
 import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.boot.context.properties.source.ConfigurationPropertySources;
+import org.springframework.boot.testsupport.web.servlet.DirtiesUrlFactories;
+import org.springframework.boot.testsupport.web.servlet.Servlet5ClassPathOverrides;
 import org.springframework.boot.web.embedded.jetty.ConfigurableJettyWebServerFactory;
 import org.springframework.boot.web.embedded.jetty.JettyServletWebServerFactory;
 import org.springframework.boot.web.embedded.jetty.JettyWebServer;
@@ -54,8 +55,8 @@ import org.springframework.test.context.support.TestPropertySourceUtils;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
 
 /**
  * Tests for {@link JettyWebServerFactoryCustomizer}.
@@ -64,6 +65,8 @@ import static org.mockito.Mockito.verify;
  * @author Phillip Webb
  * @author HaiTao Zhang
  */
+@DirtiesUrlFactories
+@Servlet5ClassPathOverrides
 class JettyWebServerFactoryCustomizerTests {
 
 	private MockEnvironment environment;
@@ -85,14 +88,14 @@ class JettyWebServerFactoryCustomizerTests {
 		this.environment.setProperty("DYNO", "-");
 		ConfigurableJettyWebServerFactory factory = mock(ConfigurableJettyWebServerFactory.class);
 		this.customizer.customize(factory);
-		verify(factory).setUseForwardHeaders(true);
+		then(factory).should().setUseForwardHeaders(true);
 	}
 
 	@Test
 	void defaultUseForwardHeaders() {
 		ConfigurableJettyWebServerFactory factory = mock(ConfigurableJettyWebServerFactory.class);
 		this.customizer.customize(factory);
-		verify(factory).setUseForwardHeaders(false);
+		then(factory).should().setUseForwardHeaders(false);
 	}
 
 	@Test
@@ -100,7 +103,7 @@ class JettyWebServerFactoryCustomizerTests {
 		this.serverProperties.setForwardHeadersStrategy(ServerProperties.ForwardHeadersStrategy.NATIVE);
 		ConfigurableJettyWebServerFactory factory = mock(ConfigurableJettyWebServerFactory.class);
 		this.customizer.customize(factory);
-		verify(factory).setUseForwardHeaders(true);
+		then(factory).should().setUseForwardHeaders(true);
 	}
 
 	@Test
@@ -109,7 +112,7 @@ class JettyWebServerFactoryCustomizerTests {
 		this.serverProperties.setForwardHeadersStrategy(ServerProperties.ForwardHeadersStrategy.NONE);
 		ConfigurableJettyWebServerFactory factory = mock(ConfigurableJettyWebServerFactory.class);
 		this.customizer.customize(factory);
-		verify(factory).setUseForwardHeaders(false);
+		then(factory).should().setUseForwardHeaders(false);
 	}
 
 	@Test
@@ -159,7 +162,7 @@ class JettyWebServerFactoryCustomizerTests {
 		assertThat(defaultQueue).isInstanceOf(BlockingArrayQueue.class);
 		assertThat(configuredQueue).isInstanceOf(BlockingArrayQueue.class);
 		assertThat(((BlockingArrayQueue<?>) defaultQueue).getMaxCapacity())
-				.isEqualTo(((BlockingArrayQueue<?>) configuredQueue).getMaxCapacity());
+			.isEqualTo(((BlockingArrayQueue<?>) configuredQueue).getMaxCapacity());
 	}
 
 	@Test
@@ -236,7 +239,7 @@ class JettyWebServerFactoryCustomizerTests {
 		assertThat(queuedThreadPool.getMinThreads()).isEqualTo(defaultProperties.getThreads().getMin());
 		assertThat(queuedThreadPool.getMaxThreads()).isEqualTo(defaultProperties.getThreads().getMax());
 		assertThat(queuedThreadPool.getIdleTimeout())
-				.isEqualTo(defaultProperties.getThreads().getIdleTimeout().toMillis());
+			.isEqualTo(defaultProperties.getThreads().getIdleTimeout().toMillis());
 	}
 
 	private CustomRequestLog getRequestLog(JettyWebServer server) {
@@ -256,7 +259,7 @@ class JettyWebServerFactoryCustomizerTests {
 		this.serverProperties.setForwardHeadersStrategy(ForwardHeadersStrategy.NATIVE);
 		ConfigurableJettyWebServerFactory factory = mock(ConfigurableJettyWebServerFactory.class);
 		this.customizer.customize(factory);
-		verify(factory).setUseForwardHeaders(true);
+		then(factory).should().setUseForwardHeaders(true);
 	}
 
 	@Test
@@ -296,8 +299,9 @@ class JettyWebServerFactoryCustomizerTests {
 		server.start();
 		server.stop();
 		return Arrays.stream(server.getServer().getConnectors())
-				.filter((connector) -> connector instanceof AbstractConnector).map(Connector::getIdleTimeout)
-				.collect(Collectors.toList());
+			.filter((connector) -> connector instanceof AbstractConnector)
+			.map(Connector::getIdleTimeout)
+			.toList();
 	}
 
 	private List<Integer> getRequestHeaderSizes(JettyWebServer server) {
@@ -307,12 +311,14 @@ class JettyWebServerFactoryCustomizerTests {
 		server.stop();
 		Connector[] connectors = server.getServer().getConnectors();
 		for (Connector connector : connectors) {
-			connector.getConnectionFactories().stream().filter((factory) -> factory instanceof ConnectionFactory)
-					.forEach((cf) -> {
-						ConnectionFactory factory = (ConnectionFactory) cf;
-						HttpConfiguration configuration = factory.getHttpConfiguration();
-						requestHeaderSizes.add(configuration.getRequestHeaderSize());
-					});
+			connector.getConnectionFactories()
+				.stream()
+				.filter((factory) -> factory instanceof ConnectionFactory)
+				.forEach((cf) -> {
+					ConnectionFactory factory = (ConnectionFactory) cf;
+					HttpConfiguration configuration = factory.getHttpConfiguration();
+					requestHeaderSizes.add(configuration.getRequestHeaderSize());
+				});
 		}
 		return requestHeaderSizes;
 	}

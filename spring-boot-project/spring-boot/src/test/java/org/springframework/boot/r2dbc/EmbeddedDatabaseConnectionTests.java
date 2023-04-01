@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2021 the original author or authors.
+ * Copyright 2012-2023 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,19 +19,23 @@ package org.springframework.boot.r2dbc;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.util.Arrays;
+import java.util.UUID;
 import java.util.stream.Stream;
 
+import io.r2dbc.spi.ConnectionFactories;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 
 /**
  * Tests for {@link EmbeddedDatabaseConnection}.
  *
  * @author Stephane Nicoll
+ * @author Andy Wilkinson
  */
 class EmbeddedDatabaseConnectionTests {
 
@@ -44,13 +48,49 @@ class EmbeddedDatabaseConnectionTests {
 	@Test
 	void getReturnsH2ByDefault() {
 		assertThat(EmbeddedDatabaseConnection.get(EmbeddedDatabaseConnectionTests.class.getClassLoader()))
-				.isEqualTo(EmbeddedDatabaseConnection.H2);
+			.isEqualTo(EmbeddedDatabaseConnection.H2);
 	}
 
 	@Test
 	void getWhenH2IsNotOnTheClasspathReturnsNone() {
 		assertThat(EmbeddedDatabaseConnection.get(new HidePackagesClassLoader("io.r2dbc.h2")))
-				.isEqualTo(EmbeddedDatabaseConnection.NONE);
+			.isEqualTo(EmbeddedDatabaseConnection.NONE);
+	}
+
+	@Test
+	void whenH2IsInMemoryThenIsEmbeddedReturnsTrue() {
+		assertThat(EmbeddedDatabaseConnection
+			.isEmbedded(ConnectionFactoryBuilder.withUrl("r2dbc:h2:mem:///" + UUID.randomUUID()).build())).isTrue();
+	}
+
+	@Test
+	void whenH2IsUsingFileStorageThenIsEmbeddedReturnsFalse() {
+		assertThat(EmbeddedDatabaseConnection
+			.isEmbedded(ConnectionFactoryBuilder.withUrl("r2dbc:h2:file:///" + UUID.randomUUID()).build())).isFalse();
+	}
+
+	@Test
+	void whenPoolIsBasedByH2InMemoryThenIsEmbeddedReturnsTrue() {
+		assertThat(EmbeddedDatabaseConnection
+			.isEmbedded(ConnectionFactoryBuilder.withUrl("r2dbc:pool:h2:mem:///" + UUID.randomUUID()).build()))
+			.isTrue();
+	}
+
+	@Test
+	void whenPoolIsBasedByH2WithFileStorageThenIsEmbeddedReturnsFalse() {
+		assertThat(EmbeddedDatabaseConnection
+			.isEmbedded(ConnectionFactoryBuilder.withUrl("r2dbc:pool:h2:file:///" + UUID.randomUUID()).build()))
+			.isFalse();
+	}
+
+	@Test
+	void whenConnectionFactoryIsNotOptionsCapableThenIsEmbeddedThrows() {
+		assertThatIllegalArgumentException()
+			.isThrownBy(() -> EmbeddedDatabaseConnection
+				.isEmbedded(ConnectionFactories.get("r2dbc:pool:h2:mem:///" + UUID.randomUUID())))
+			.withMessage("Cannot determine database's type as ConnectionFactory is not options-capable. To be "
+					+ "options-capable, a ConnectionFactory should be created with "
+					+ "org.springframework.boot.r2dbc.ConnectionFactoryBuilder");
 	}
 
 	static Stream<Arguments> urlParameters() {
